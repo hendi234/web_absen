@@ -20,15 +20,15 @@ class ListAbsensiHarians extends ListRecords
             Actions\CreateAction::make(), // Tambahkan CreateAction sebagai default
         ];
 
-        // Hanya tampilkan tombol Export jika id_roles bukan 2
-        if ($user->id_roles !== 2) {
-            $actions[] = ExportAction::make()
-                ->exporter(AbsensiHarianExporter::class)
-                ->label('Export Data')
-                ->icon('heroicon-m-document-chart-bar')
-                ->color('success')
-                ->fileDisk('public');
-        }
+        // Hanya role 1 (admin misalnya) yang bisa export
+    if ($user->id_roles == 1) {
+        $actions[] = ExportAction::make()
+            ->exporter(AbsensiHarianExporter::class)
+            ->label('Export Data')
+            ->icon('heroicon-m-document-chart-bar')
+            ->color('success')
+            ->fileDisk('public');
+    }
 
         return $actions;
     }

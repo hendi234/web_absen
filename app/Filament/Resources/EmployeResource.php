@@ -39,9 +39,14 @@ class EmployeResource extends Resource
                     ->image()
                     ->label('Foto')
                     ->columnSpanFull(),
-                TextInput::make('nip')
+                    TextInput::make('nip')
                     ->required()
                     ->maxLength(16)
+                    ->unique(ignoreRecord: true)
+                    ->validationMessages([
+                        'unique' => 'NIP sudah digunakan oleh akun lain.',
+                    ])
+                    ->dehydrated(true)
                     ->columnSpanFull(),
                 TextInput::make('name')
                     ->required()

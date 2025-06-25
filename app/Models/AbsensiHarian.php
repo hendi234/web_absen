@@ -10,10 +10,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class AbsensiHarian extends Model
 {
     use HasFactory;
+
     protected $table = 'daily_attendance';
     protected $guarded = ['id'];
 
-     // Menyimpan siapa yang terakhir mengupdate data
+    // Menyimpan siapa yang terakhir mengupdate data
     public static function boot()
     {
         parent::boot();
@@ -25,24 +26,37 @@ class AbsensiHarian extends Model
         });
     }
 
-    // Relasi ke User
+    // Event deleting untuk menghapus relasi otomatis
+    protected static function booted()
+    {
+        static::deleting(function ($absensi) {
+            if ($absensi->absenMasuk) {
+                $absensi->absenMasuk->delete();
+            }
+            if ($absensi->absenKeluar) {
+                $absensi->absenKeluar->delete();
+            }
+        });
+    }
+
+    // Relasi ke User yang terakhir update
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
     }
 
-    // Getter untuk menampilkan nama user yang terakhir mengupdate
+    // Getter nama user yang terakhir update
     public function getUpdatedNameAttribute()
     {
-        return $this->updatedBy?->name ?? null ;
+        return $this->updatedBy?->name ?? null;
     }
 
     public function user()
     {
         return $this->hasOneThrough(User::class, AbsenMasuk::class, 'id', 'id', 'id_attendance_in', 'user_id');
-    }    
+    }
 
-    // Method untuk get data employe
+    // Getter posisi karyawan
     public function getPositionAttribute()
     {
         return Employe::select('employes.position')
@@ -52,7 +66,7 @@ class AbsensiHarian extends Model
             ->value('position');
     }
 
-    // Method untuk get data employe
+    // Getter NIP karyawan
     public function getNipAttribute()
     {
         return Employe::select('employes.nip')

@@ -68,8 +68,9 @@ class User extends Authenticatable implements HasAvatar
         return $this->$avatarColumn ? Storage::disk('karyawan')->url($this->$avatarColumn) : null;
     }
 
-    public function isAdmin()
-    {
-        return $this->id_roles == 1;
-    }
+ public function isAdmin()
+{
+    return in_array($this->id_roles, [1]);
+}
+
 }

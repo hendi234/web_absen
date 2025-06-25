@@ -158,10 +158,10 @@ class AbsensiTable extends BaseWidget
                             '0' => 'Pending',
                             '1' => 'Approve',
                         ])
-                        ->disabled(fn () => Auth::user()?->id_roles !== 1),
-                    TextColumn::make('updatedBy.name')
-                        ->label('Di Approve Oleh')
-                        ->searchable(),
+                        ->disabled(fn () => Auth::user()?->id_roles === 2),
+                        TextColumn::make('updatedBy.name')
+                            ->label('Di Approve Oleh')
+                            ->searchable(),                        
                 ]);
     }
 }

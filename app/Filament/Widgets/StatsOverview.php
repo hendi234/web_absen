@@ -115,8 +115,8 @@ class StatsOverview extends BaseWidget
         // ✅ Total absensi yang sudah masuk hari ini
         $absenHariIni = AbsensiHarian::whereDate('created_at', Carbon::today())->count();
     
-        $stats[] = Stat::make('Total Absen Hari Ini', $absenHariIni . ' Karyawan')
-            ->description('Data absensi per hari ini')
+        $stats[] = Stat::make('Total Rekap Absen harian', $absenHariIni . ' Karyawan')
+            ->description('Data rekap absensi harian')
             ->descriptionIcon('heroicon-o-user-group')
             ->icon('heroicon-s-clipboard-document-check')
             ->color('success')

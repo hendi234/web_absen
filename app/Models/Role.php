@@ -12,4 +12,12 @@ class Role extends Model
     use HasFactory, AuditedBy, SoftDeletes;
     protected $table = 'roles';
     protected $guarded = ['id'];
+
+     /**
+     * Relasi ke User
+     */
+    public function users()
+    {
+        return $this->hasMany(User::class, 'id_roles');
+    }
 }

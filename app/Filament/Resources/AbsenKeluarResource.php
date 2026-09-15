@@ -26,41 +26,62 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\AbsenKeluarResource\Pages;
-use App\Filament\Resources\AbsenKeluarResource\RelationManagers;
 
 class AbsenKeluarResource extends Resource
 {
     protected static ?string $model = AbsenKeluar::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar';
-
     protected static ?string $navigationGroup = 'Manajemen Absensi';
-
     protected static ?int $navigationSort = 2;
+
+    // ============= TAMBAHKAN INI =============
+    // Untuk mengubah label di sidebar dari "Absen Keluar" menjadi "Absen Pulang"
+    protected static ?string $navigationLabel = 'Absen Pulang';
+    
+    // Untuk mengubah label di halaman index (judul tabel)
+    protected static ?string $pluralLabel = 'Absen Pulang';
+    protected static ?string $label = 'Absen Pulang';
+
+    // Helper untuk mengambil timezone cabang user yang melakukan absen
+    protected static function getTimezoneForRecord($record): string
+    {
+        $user = $record->user ?? null;
+        if ($user && $user->employe && $user->employe->branch) {
+            return $user->employe->branch->timezone ?? 'Asia/Jakarta';
+        }
+        return config('app.timezone', 'Asia/Jakarta');
+    }
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Hidden::make('user_id')
-                ->default(Auth::id()),
+                    ->default(Auth::id()),
+
                 TextInput::make('latitude')
                     ->label('Latitude')
                     ->default(fn () => request()->input('latitude'))
                     ->required(),
+
                 TextInput::make('longitude')
                     ->label('Longitude')
                     ->default(fn () => request()->input('longitude'))
                     ->required(),
+
                 FileUpload::make('foto')
                     ->required()
                     ->image()
                     ->disk('absensi')
                     ->columnSpanFull(),
+
                 Textarea::make('desc')
+                    ->label('Keterangan')
                     ->required()
                     ->columnSpanFull(),
-                Hidden::make('attendance_time')
+
+                Hidden::make('time_attendance')
                     ->default(now()),
             ]);
     }
@@ -72,45 +93,48 @@ class AbsenKeluarResource extends Resource
                 TextColumn::make('user.name')
                     ->label('Nama')
                     ->sortable()
-                    ->searchable(auth()->user()->id_roles == 1), // Pencarian hanya untuk admin
-                TextColumn::make('location') // method untuk menampilkan lokasi absen
+                    ->searchable(Auth::user()->id_roles == 1),
+
+                TextColumn::make('location')
                     ->label('Lokasi')
                     ->badge()
                     ->color('blue')
                     ->icon('heroicon-o-map-pin')
-                    ->getStateUsing(fn ($record) => 
-                        "<a href='https://www.google.com/maps?q={$record->latitude},{$record->longitude}' target='_blank'>Lihat Lokasi</a>")
+                    ->getStateUsing(fn ($record) => "<a href='https://www.google.com/maps?q={$record->latitude},{$record->longitude}' target='_blank'>Lihat Lokasi</a>")
                     ->html()
                     ->tooltip('Klik untuk melihat lokasi'),
+
                 ImageColumn::make('foto')
                     ->disk('public')
                     ->height(80)
                     ->url(fn($record) => asset('storage/' . $record->foto))
                     ->label('Foto'),
-                TextColumn::make('tanggal_absen')
-                    ->label('Tanggal')
-                    ->getStateUsing(fn ($record) => \Carbon\Carbon::parse($record->time_attendance)->translatedFormat('d M Y'))
-                    ->sortable(),
+
+                TextColumn::make('desc')
+                    ->label('Keterangan')
+                    ->wrap(),
+
+                // PERUBAHAN DISINI: Sesuaikan dengan timezone cabang
                 TextColumn::make('time_attendance')
-                    ->label('Waktu')
-                    ->dateTime('H:i:s')
+                    ->label('Tanggal & Waktu')
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->translatedFormat('d M Y H:i:s');
+                    })
                     ->sortable(),
             ])
             ->filters([
-                Filter::make('tanggal_absen')
-                ->form([
-                    DatePicker::make('from')->label('Dari'),
-                    DatePicker::make('to')->label('Sampai'),
-                ])
-                ->query(function (Builder $query, array $data) {
-                    return $query
-                        ->when($data['from'] ?? null, fn ($query) => 
-                            $query->whereDate('time_attendance', '>=', $data['from'])
-                        )
-                        ->when($data['to'] ?? null, fn ($query) => 
-                            $query->whereDate('time_attendance', '<=', $data['to'])
-                        );
-                }),
+                Filter::make('tanggal')
+                    ->form([
+                        DatePicker::make('from')->label('Dari'),
+                        DatePicker::make('to')->label('Sampai'),
+                    ])
+                    ->query(fn (Builder $query, array $data) =>
+                        $query->when($data['from'] ?? null, fn($q) => $q->whereDate('time_attendance', '>=', $data['from']))
+                              ->when($data['to'] ?? null, fn($q) => $q->whereDate('time_attendance', '<=', $data['to']))
+                    ),
             ])
             ->actions([
                 EditAction::make(),
@@ -122,41 +146,49 @@ class AbsenKeluarResource extends Resource
                 ]),
             ])
             ->headerActions(array_filter([
-                auth()->user()->id_roles == 2 ?
+                Auth::user()->id_roles == 2 ?
                 Action::make('create')
                     ->label('Tambah Presensi')
                     ->icon('heroicon-o-plus')
                     ->color('success')
                     ->url(fn () => url('/absenkeluar'))
-                    ->openUrlInNewTab(false)
                     : null,
-                ]));  
+            ]));
     }
 
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
             ->schema([
-                TextEntry::make('user.name')
-                    ->label('Nama'),
-                TextEntry::make('location') // method untuk menampilkan lokasi absen
+                TextEntry::make('user.name')->label('Nama'),
+
+                TextEntry::make('desc')
+                    ->label('Keterangan')
+                    ->getStateUsing(fn ($record) => nl2br(e($record->desc)))
+                    ->html(),
+
+                TextEntry::make('location')
                     ->label('Lokasi')
                     ->badge()
                     ->color('blue')
                     ->icon('heroicon-o-map-pin')
-                    ->getStateUsing(fn ($record) => 
-                        "<a href='https://www.google.com/maps?q={$record->latitude},{$record->longitude}' target='_blank'>Lihat Lokasi</a>")
+                    ->getStateUsing(fn ($record) => "<a href='https://www.google.com/maps?q={$record->latitude},{$record->longitude}' target='_blank'>Lihat Lokasi</a>")
                     ->html(),
+
                 ImageEntry::make('foto')
                     ->disk('public')
                     ->height(80)
                     ->url(fn($record) => asset('storage/' . $record->foto)),
-                TextEntry::make('tanggal_absen')
-                    ->label('Tanggal')
-                    ->getStateUsing(fn ($record) => \Carbon\Carbon::parse($record->time_attendance)->translatedFormat('d M Y')),
+
+                // PERUBAHAN DISINI: Sesuaikan dengan timezone cabang
                 TextEntry::make('time_attendance')
-                    ->label('Waktu')
-                    ->dateTime('H:i:s'),
+                    ->label('Tanggal & Waktu')
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->translatedFormat('d M Y H:i:s');
+                    }),
             ])
             ->columns(1)
             ->inlineLabel();
@@ -164,9 +196,7 @@ class AbsenKeluarResource extends Resource
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
@@ -178,15 +208,27 @@ class AbsenKeluarResource extends Resource
         ];
     }
 
-    // method untuk memfilter data berdasarkan user yang sedang login
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
-    
-        if (Auth::check() && Auth::user()->role->id === 2) {
-            $query->where('user_id', Auth::id());
+        $user = Auth::user();
+
+        if ($user) {
+            if ($user->id_roles == 2) {
+                $query->where('user_id', $user->id);
+            } elseif ($user->id_roles == 3) {
+                $query->whereHas('user.employe', function ($q) use ($user) {
+                    $q->where('division_id', $user->employe->division_id);
+                });
+            }
         }
-    
+
+        $table = $query->getModel()->getTable();
+            $query->join('users', 'users.id', '=', $table . '.user_id')
+                ->orderBy($table . '.time_attendance', 'desc')
+                ->orderBy('users.name', 'asc')
+                ->select($table . '.*');
+
         return $query;
     }
 }

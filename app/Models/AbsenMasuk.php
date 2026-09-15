@@ -17,4 +17,10 @@ class AbsenMasuk extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    // Tambahkan relasi ke Branch
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
 }

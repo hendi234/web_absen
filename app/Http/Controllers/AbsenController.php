@@ -4,31 +4,45 @@ namespace App\Http\Controllers;
 
 use App\Models\AbsenMasuk;
 use App\Models\AbsenKeluar;
-use Illuminate\Http\Request;
 use App\Models\AbsensiHarian;
+use App\Models\Employe;
 use Filament\Facades\Filament;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AbsenController extends Controller
 {
-    // Method untuk menampilkan halaman absen masuk
+    // Form Absen Masuk
     public function create()
     {
         $absenMasuk = AbsenMasuk::all();
         return view('absensi.masuk', compact('absenMasuk'));
     }
 
-    // Method untu get data user yang sedang login
+    // Ambil user yang login
+    // public function user()
+    // {
+    //     $user = Filament::auth()->user();
+    //     return view('absensi.masuk', compact('user'));
+    // }
     public function user()
     {
         $user = Filament::auth()->user();
+        
+        // Jika user tidak ditemukan, tendang ke login
+        if (!$user) {
+            return redirect('/absensi/login');
+        }
 
         return view('absensi.masuk', compact('user'));
     }
 
-    // Method untuk menyimpan data absen masuk
+    // ===========================
+    // Absen Masuk
+    // ===========================
     public function absenMasuk(Request $request)
     {
         $validated = $request->validate([
@@ -37,50 +51,88 @@ class AbsenController extends Controller
             'longitude' => 'required|numeric',
             'foto' => 'required|string',
             'desc' => 'required|string|max:255',
-            'time_attendance' => 'required|date',
+            'time_attendance' => 'sometimes|date',
         ], [
-            'user_id.required' => 'ID pengguna wajib diisi.',
-            'user_id.exists' => 'ID pengguna tidak ditemukan.',
-        
-            'latitude.required' => 'lokasi wajib diisi.',
-            'longitude.required' => 'lokasi wajib diisi.',
-        
-            'foto.required' => 'Foto wajib diunggah.',
-        
+            'latitude.required' => 'Lokasi wajib diisi.',
+            'longitude.required' => 'Lokasi wajib diisi.',
+            'foto.required' => 'Foto wajib diisi.',
             'desc.required' => 'Keterangan wajib diisi.',
-            'desc.max' => 'Keterangan tidak boleh lebih dari 255 karakter.',
-        
-            'time_attendance.required' => 'Waktu absen wajib diisi.',
-            'time_attendance.date' => 'Format waktu absen tidak valid.',
         ]);
-        
 
         $userId = $validated['user_id'];
         $today = Carbon::today();
 
-        // Cek apakah user sudah absen masuk hari ini
-        $existingAbsen = AbsenMasuk::where('user_id', $userId)
-        ->whereDate('time_attendance', $today)
-        ->exists();
+        // ========== PERBAIKAN: Ambil employee via relasi User ==========
+        $user = \App\Models\User::find($userId);
+        if (!$user) {
+            return back()->with('error', 'User tidak ditemukan.');
+        }
+        
+        $employee = $user->employe; // Langsung ambil via relasi belongsTo
+        if (!$employee) {
+            return back()->with('error', 'Data karyawan tidak ditemukan. Hubungi admin.');
+        }
+        
+        $branchId = $employee->branch_id;
+        if (is_null($branchId)) {
+            return back()->with('error', 'Karyawan belum ditugaskan ke cabang. Hubungi admin.');
+        }
+        // ===============================================================
 
-        if ($existingAbsen) {
+        // 1. CEK DULU SEBELUM PROSES FOTO
+        $sudahMasuk = AbsenMasuk::where('user_id', $userId)
+            ->whereDate('time_attendance', $today)
+            ->exists();
+            
+        $sudahKeluar = AbsenKeluar::where('user_id', $userId)
+            ->whereDate('time_attendance', $today)
+            ->exists();
+
+        if ($sudahMasuk && $sudahKeluar) {
+            return back()->with('error', 'Anda sudah menyelesaikan absensi hari ini (masuk dan keluar).');
+        }
+
+        if ($sudahKeluar) {
+            return back()->with('error', 'Anda sudah absen keluar hari ini, tidak bisa absen masuk lagi.');
+        }
+
+        if ($sudahMasuk) {
             return back()->with('error', 'Anda sudah melakukan absen masuk hari ini.');
         }
 
-        $validated['foto'] = $this->processImage($validated['foto']);
+        // 2. JIKA AMAN, BARU PROSES FOTO
+        try {
+            $validated['foto'] = $this->processImage($validated['foto']);
+            $validated['time_attendance'] = Carbon::now();
+            $validated['branch_id'] = $branchId;
 
-        // Set waktu absen
-        $validated['time_attendance'] = Carbon::now()->locale('id');
+            DB::beginTransaction();
 
-        // Simpan ke database
-        $absenMasuk = new AbsenMasuk();
-        $absenMasuk->fill($validated);
-        $absenMasuk->save();
+            $absenMasuk = AbsenMasuk::create($validated);
 
-        return redirect('/absensi/absen-masuks')->with('success', 'Absen Masuk Berhasil');
+            AbsensiHarian::create([
+                'tanggal' => now()->toDateString(),
+                'id_attendance_in' => $absenMasuk->id,
+                'branch_id' => $branchId,
+                'desc' => $validated['desc'] ?? null,
+                'status' => true,
+                'updated_by' => null,
+            ]);
+
+            DB::commit();
+
+            return redirect('/absensi/absen-masuks')->with('success', 'Absen Masuk berhasil & tercatat di Absensi Harian');
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error($e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.');
+        }
     }
 
-    // Menyimpan data absen keluar
+    // ===========================
+    // Absen Keluar
+    // ===========================
     public function absenKeluar(Request $request)
     {
         $validated = $request->validate([
@@ -88,88 +140,100 @@ class AbsenController extends Controller
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'foto' => 'required|string',
+            'desc' => 'nullable|string|max:255',
         ], [
-            'latitude.required' => 'Lokasi wajib di isi.',
-            'longitude.required' => 'Lokasi wajib di isi.',
-            'foto.required' => 'Foto wajib diunggah.',
-            'foto.image' => 'File harus berupa gambar.',
-            'foto.mimes' => 'Format gambar harus jpeg, png, atau jpg.',
-            'foto.max' => 'Ukuran gambar maksimal 2MB.'
+            'latitude.required' => 'Lokasi wajib diisi.',
+            'longitude.required' => 'Lokasi wajib diisi.',
+            'foto.required' => 'Foto wajib diisi.',
         ]);
-
-        // Cek apakah user sudah memiliki absen masuk hari ini
-        $absenMasuk = AbsenMasuk::where('user_id', $request->user_id)
-            ->whereDate('time_attendance', now()->toDateString())
-            ->first();
-
-        if (!$absenMasuk) {
-            return redirect()->back()->with('error', 'Anda belum melakukan absen masuk hari ini!');
-        }
 
         $userId = $validated['user_id'];
         $today = Carbon::today();
 
-        // Cek apakah user sudah absen keluar hari ini
-        $existingAbsenKeluar = AbsenKeluar::where('user_id', $userId)
+        // ========== PERBAIKAN: Ambil employee via relasi User ==========
+        $user = \App\Models\User::find($userId);
+        if (!$user) {
+            return back()->with('error', 'User tidak ditemukan.');
+        }
+        
+        $employee = $user->employe;
+        if (!$employee) {
+            return back()->with('error', 'Data karyawan tidak ditemukan.');
+        }
+        
+        $branchId = $employee->branch_id;
+        if (is_null($branchId)) {
+            return back()->with('error', 'Karyawan belum ditugaskan ke cabang.');
+        }
+        // ===============================================================
+
+        // 1. CEK DULU
+        $sudahKeluar = AbsenKeluar::where('user_id', $userId)
             ->whereDate('time_attendance', $today)
             ->exists();
 
-        if ($existingAbsenKeluar) {
+        if ($sudahKeluar) {
             return back()->with('error', 'Anda sudah melakukan absen keluar hari ini.');
         }
 
-        // Proses gambar
-        $validated['foto'] = $this->processImage($validated['foto']);
-        $validated['time_attendance'] = now();
+        try {
+            $validated['foto'] = $this->processImage($validated['foto']);
+            $validated['time_attendance'] = now();
+            $validated['branch_id'] = $branchId;
 
-        // Simpan Absen Keluar
-        $absenKeluar = AbsenKeluar::create($validated);
-            
-        if ($absenMasuk) {
-            // Hitung Durasi Kerja
-            $masukTime = Carbon::parse($absenMasuk->time_attendance);
-            $keluarTime = Carbon::parse($validated['time_attendance']);
-            $durasiKerja = $keluarTime->diff($masukTime)->format('%H:%I:%S');
+            DB::beginTransaction();
 
-            // Cek apakah sudah ada AbsensiHarian untuk user ini hari ini
-            $absensiHarian = AbsensiHarian::where('id_attendance_in', $absenMasuk->id)->first();
+            $absenKeluar = AbsenKeluar::create($validated);
 
-            if ($absensiHarian) {
-                // Jika sudah ada, update data keluar & durasi
-                $absensiHarian->update([
-                    'id_attendance_out' => $absenKeluar->id,
-                    'work_time' => $durasiKerja,
-                    'status' => 0,
-                ]);
+            $absenMasuk = AbsenMasuk::where('user_id', $userId)
+                ->whereDate('time_attendance', $today)
+                ->first();
+
+            if ($absenMasuk) {
+                $masukTime = Carbon::parse($absenMasuk->time_attendance);
+                $keluarTime = Carbon::parse($validated['time_attendance']);
+                $durasi = $keluarTime->diff($masukTime)->format('%H:%I:%S');
+
+                $absensiHarian = AbsensiHarian::where('id_attendance_in', $absenMasuk->id)->first();
+                if ($absensiHarian) {
+                    $absensiHarian->update([
+                        'id_attendance_out' => $absenKeluar->id,
+                        'work_time' => $durasi,
+                        'status' => false,
+                        'desc' => $validated['desc'] ?? $absensiHarian->desc,
+                        'updated_by' => null,
+                    ]);
+                }
             } else {
-                // Jika belum ada, buat baru
                 AbsensiHarian::create([
                     'tanggal' => now()->toDateString(),
-                    'id_attendance_in' => $absenMasuk->id,
                     'id_attendance_out' => $absenKeluar->id,
-                    'work_time' => $durasiKerja,
-                    'status' => 0,
-                    'updated_by' => null
+                    'branch_id' => $branchId,
+                    'desc' => $validated['desc'] ?? null,
+                    'status' => false,
+                    'updated_by' => null,
                 ]);
             }
-        }
 
-        return redirect('/absensi/absen-keluars')->with('success', 'Absen Keluar Berhasil');
+            DB::commit();
+            return redirect('/absensi/absen-keluars')->with('success', 'Absen Keluar berhasil & tercatat di Absensi Harian');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error($e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data absen keluar.');
+        }
     }
 
-    // Method untuk memproses gambar
+    // ===========================
+    // Fungsi helper simpan foto base64
+    // ===========================
     private function processImage($base64Image)
     {
         $imageParts = explode(";base64,", $base64Image);
-        if (count($imageParts) === 2) {
-            $base64Image = $imageParts[1]; 
-        }
+        $base64Image = count($imageParts) === 2 ? $imageParts[1] : $imageParts[0];
 
         $imageData = base64_decode($base64Image);
-        if ($imageData === false) {
-            return back()->with('error', 'Gagal mengkonversi gambar.');
-        }
-
         $imageName = uniqid() . '.png';
         Storage::disk('absensi')->put($imageName, $imageData);
 

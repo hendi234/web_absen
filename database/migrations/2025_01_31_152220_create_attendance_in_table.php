@@ -14,11 +14,11 @@ return new class extends Migration
         Schema::create('attendance_in', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('latitude', 20);
-            $table->string('longitude', 20);
-            $table->text('foto');
-            $table->text('desc');
-            $table->timestamp('time_attendance')->default(now());
+            $table->string('latitude', 20)->nullable();       // bisa null
+            $table->string('longitude', 20)->nullable();      // bisa null
+            $table->text('foto')->nullable();                 // bisa null
+            $table->text('desc')->nullable();                 // bisa null
+            $table->timestamp('time_attendance')->nullable(); // bisa null
         });
     }
 

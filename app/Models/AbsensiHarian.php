@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Branch;
 
 class AbsensiHarian extends Model
 {
@@ -14,85 +15,77 @@ class AbsensiHarian extends Model
     protected $table = 'daily_attendance';
     protected $guarded = ['id'];
 
-    // Menyimpan siapa yang terakhir mengupdate data
-    public static function boot()
-    {
-        parent::boot();
+    protected $fillable = [
+        'tanggal',
+        'id_attendance_in',
+        'id_attendance_out',
+        'work_time',
+        'desc',          // keterangan absen keluar
+        'status',
+        'updated_by',
+        'branch_id',
+    ];
 
-        static::updating(function ($model) {
-            if (!$model->isDirty('updated_by')) {
-                $model->updated_by = Auth::id(); // Ambil ID user yang sedang login
-            }
-        });
-    }
+    protected $casts = [
+        'status' => 'boolean',
+    ];
 
-    // Event deleting untuk menghapus relasi otomatis
+    // Boot untuk update otomatis updated_by saat admin
     protected static function booted()
     {
+        static::updating(function ($model) {
+            $user = Auth::user();
+            if ($user && $user->id_roles == 1) { // admin
+                $model->updated_by = $user->id;
+            }
+        });
+
+        // Hapus otomatis relasi absen
         static::deleting(function ($absensi) {
-            if ($absensi->absenMasuk) {
-                $absensi->absenMasuk->delete();
-            }
-            if ($absensi->absenKeluar) {
-                $absensi->absenKeluar->delete();
-            }
+            $absensi->absenMasuk?->delete();
+            $absensi->absenKeluar?->delete();
         });
     }
 
-    // Relasi ke User yang terakhir update
+    // Relasi ke admin yang update
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
     }
 
-    // Getter nama user yang terakhir update
     public function getUpdatedNameAttribute()
     {
-        return $this->updatedBy?->name ?? null;
+        return $this->updatedBy?->name ?? '-';
     }
 
-    public function user()
-    {
-        return $this->hasOneThrough(User::class, AbsenMasuk::class, 'id', 'id', 'id_attendance_in', 'user_id');
-    }
-
-    // Getter posisi karyawan
-    public function getPositionAttribute()
-    {
-        return Employe::select('employes.position')
-            ->join('users', 'users.id_employes', '=', 'employes.id')
-            ->join('attendance_in', 'attendance_in.user_id', '=', 'users.id')
-            ->where('attendance_in.id', $this->id_attendance_in)
-            ->value('position');
-    }
-
-    // Getter NIP karyawan
-    public function getNipAttribute()
-    {
-        return Employe::select('employes.nip')
-            ->join('users', 'users.id_employes', '=', 'employes.id')
-            ->join('attendance_in', 'attendance_in.user_id', '=', 'users.id')
-            ->where('attendance_in.id', $this->id_attendance_in)
-            ->value('nip');
-    }
-
-    public function employe()
-    {
-        return $this->belongsTo(Employe::class, 'id_employes', 'id');
-    }
-
-    public function user2()
-    {
-        return $this->belongsTo(User::class, 'id_users', 'id');
-    }
-
+    // Relasi absen masuk
     public function absenMasuk()
     {
         return $this->belongsTo(AbsenMasuk::class, 'id_attendance_in');
     }
 
+    // Relasi absen keluar
     public function absenKeluar()
     {
         return $this->belongsTo(AbsenKeluar::class, 'id_attendance_out');
+    }
+
+    // Accessor user — ambil dari absen masuk atau absen keluar
+    public function getUserAttribute()
+    {
+        if ($this->absenMasuk) {
+            return $this->absenMasuk->user;
+        }
+
+        if ($this->absenKeluar) {
+            return $this->absenKeluar->user;
+        }
+
+        return null;
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

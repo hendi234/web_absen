@@ -34,6 +34,16 @@ class AbsenMasukResource extends Resource
 
     protected static ?string $navigationGroup = 'Manajemen Absensi';
 
+    // Helper untuk mengambil timezone cabang user yang melakukan absen
+    protected static function getTimezoneForRecord($record): string
+    {
+        $user = $record->user ?? null;
+        if ($user && $user->employe && $user->employe->branch) {
+            return $user->employe->branch->timezone ?? 'Asia/Jakarta';
+        }
+        return config('app.timezone', 'Asia/Jakarta');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -68,8 +78,8 @@ class AbsenMasukResource extends Resource
                 TextColumn::make('user.name')
                     ->label('Nama')
                     ->sortable()
-                    ->searchable(auth()->user()->id_roles == 1), // Pencarian hanya untuk admin
-                TextColumn::make('location') // method untuk menampilkan lokasi absen
+                    ->searchable(auth()->user()->id_roles == 1),
+                TextColumn::make('location')
                     ->label('Lokasi')
                     ->badge()
                     ->color('blue')
@@ -86,11 +96,21 @@ class AbsenMasukResource extends Resource
                     ->label('Keterangan'),
                 TextColumn::make('tanggal_absen')
                     ->label('Tanggal')
-                    ->getStateUsing(fn ($record) => \Carbon\Carbon::parse($record->time_attendance)->translatedFormat('d M Y'))
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->translatedFormat('d M Y');
+                    })
                     ->sortable(),
                 TextColumn::make('time_attendance')
                     ->label('Waktu')
-                    ->dateTime('H:i:s')
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->format('H:i:s');
+                    })
                     ->sortable(),
             ])
             ->filters([
@@ -136,7 +156,7 @@ class AbsenMasukResource extends Resource
             ->schema([
                 TextEntry::make('user.name')
                     ->label('Nama'),
-                TextEntry::make('location') // method untuk menampilkan lokasi absen
+                TextEntry::make('location')
                     ->label('Lokasi')
                     ->badge()
                     ->color('blue')
@@ -152,10 +172,20 @@ class AbsenMasukResource extends Resource
                     ->label('Keterangan'),
                 TextEntry::make('tanggal_absen')
                     ->label('Tanggal')
-                    ->getStateUsing(fn ($record) => \Carbon\Carbon::parse($record->time_attendance)->translatedFormat('d M Y')),
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->translatedFormat('d M Y');
+                    }),
                 TextEntry::make('time_attendance')
                     ->label('Waktu')
-                    ->dateTime('H:i:s'),
+                    ->getStateUsing(function ($record) {
+                        $timezone = self::getTimezoneForRecord($record);
+                        return \Carbon\Carbon::parse($record->time_attendance)
+                            ->setTimezone($timezone)
+                            ->format('H:i:s');
+                    }),
             ])
             ->columns(1)
             ->inlineLabel();
@@ -177,14 +207,27 @@ class AbsenMasukResource extends Resource
         ];
     } 
 
-    // method untuk memfilter data berdasarkan user yang sedang login
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class]);
     
-        if (Auth::check() && Auth::user()->role->id === 2) {
-            $query->where('user_id', Auth::id());
+        $user = Auth::user();
+    
+        if ($user) {
+            if ($user->id_roles == 2) {
+                $query->where('user_id', $user->id);
+            } elseif ($user->id_roles == 3) {
+                $query->whereHas('user.employe', function ($q) use ($user) {
+                    $q->where('division_id', $user->employe->division_id);
+                });
+            }
         }
+
+        $table = $query->getModel()->getTable();
+            $query->join('users', 'users.id', '=', $table . '.user_id')
+                ->orderBy($table . '.time_attendance', 'desc')
+                ->orderBy('users.name', 'asc')
+                ->select($table . '.*');
     
         return $query;
     }

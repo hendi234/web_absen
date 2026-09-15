@@ -2,27 +2,40 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use App\Models\User;
+use App\Models\Division; // ⬅️ ini yang kurang
+use App\Models\Role;      // 🔥 tambahkan ini
+use App\Models\Employe;   // kalau dipakai
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Admin',
-            'nip' => '1234',
-            'email' => 'admin@gmail.com',
-            'password' => Hash::make('12345678'),
-            'id_roles' => 1,
-            'id_employes' => 1,
-        ]);
+            // Jalankan RoleSeeder dulu
+            $this->call(RoleSeeder::class);
+    
+            // Kalau ada seeder division dan employe, panggil juga
+            $this->call(DivisionSeeder::class);
+            $this->call(EmployeSeeder::class);
+    
+            // Ambil role admin
+            $roleAdmin = Role::where('name', 'admin')->first();
+    
+            // Ambil division & employe pertama (biar nggak null)
+            $division = Division::first();
+            $employe  = Employe::first();
+    
+            User::create([
+                'name' => 'Admin',
+                'nip' => '1234',
+                'email' => 'admin@gmail.com',
+                'password' => bcrypt('12345678'),
+                'role' => 'admin',
+                'division_id' => $division?->id,   // pakai null safe operator
+                'id_employes' => $employe?->id,    // biar tidak error kalau kosong
+                'id_roles' => $roleAdmin?->id,     // aman walau null
+            ]);
     }
 }

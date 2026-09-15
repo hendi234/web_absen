@@ -5,19 +5,26 @@ namespace App\Filament\Resources;
 use Filament\Forms;
 use Filament\Tables;
 use App\Models\Employe;
+use App\Models\Division;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\ImageColumn;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\EmployeResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\EmployeResource\RelationManagers;
+use App\Models\Branch;
 
 class EmployeResource extends Resource
 {
@@ -34,7 +41,6 @@ class EmployeResource extends Resource
         return $form
             ->schema([
                 FileUpload::make('avatar')
-                    ->required()
                     ->disk('karyawan')
                     ->image()
                     ->label('Foto')
@@ -45,12 +51,7 @@ class EmployeResource extends Resource
                     TextInput::make('nip')
                     ->required()
                     ->maxLength(16)
-                    ->unique(ignoreRecord: true)
-                    ->validationMessages([
-                        'unique' => 'NIP sudah digunakan oleh akun lain.',
-                    ])
-                    ->dehydrated(true)
-                    ->columnSpanFull(),
+                    ->columnSpanFull(),                
                 TextInput::make('name')
                     ->required()
                     ->label('Nama')
@@ -63,19 +64,22 @@ class EmployeResource extends Resource
                     ->label('Email')
                     ->email()
                     ->required()
-                    ->maxLength(64)
-                    ->unique(ignoreRecord: true)
-                    ->dehydrated(true) // tetap mengirimkan value meskipun disabled
-                    ->validationMessages([
-                        'unique' => 'Email sudah digunakan.',
-                        'email' => 'Format email tidak valid.',
-                        'required' => 'Email wajib diisi.',
-                        'max' => 'Email tidak boleh lebih dari 64 karakter.',
-                    ]),  
+                    ->maxLength(64),
                 DatePicker::make('join_date')
                     ->required()
                     ->label('Tanggal Bergabung')
                     ->native(false),
+                Select::make('division_id')
+                    ->label('Divisi')
+                    ->relationship('division', 'name')
+                    ->required()
+                    ->searchable(),
+                Select::make('branch_id')
+                    ->label('Cabang')
+                    ->options(Branch::all()->pluck('name', 'id'))
+                    ->searchable()
+                    ->required()
+                    ->placeholder('Pilih Cabang'),
                 TextInput::make('education')
                     ->label('Pendidikan')
                     ->required()
@@ -100,6 +104,12 @@ class EmployeResource extends Resource
                     ->label('Nama'),
                 TextColumn::make('email')
                     ->searchable(),
+                TextColumn::make('division.name')
+                    ->label('Divisi')
+                    ->searchable(),
+                TextColumn::make('branch.name')
+                    ->label('Cabang')
+                    ->searchable(),
                 // TextColumn::make('position')
                 //     ->searchable()
                 //     ->label('Jabatan'),
@@ -112,10 +122,10 @@ class EmployeResource extends Resource
                 //     ->sortable(),
                 TextColumn::make('createdBy.name')
                     ->label('Created By'),
-                TextColumn::make('updatedBy.name')
-                    ->label("Updated by"),
-                TextColumn::make('deletedBy.name')
-                    ->label("Deleted by"),
+                // TextColumn::make('updatedBy.name')
+                //     ->label("Updated by"),
+                // TextColumn::make('deletedBy.name')
+                //     ->label("Deleted by"),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -135,7 +145,9 @@ class EmployeResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->requiresConfirmation()
+                    ->action(fn ($record) => $record->forceDelete()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

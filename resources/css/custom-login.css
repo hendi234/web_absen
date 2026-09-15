@@ -78,3 +78,9 @@ body {
         border-radius: 12px; /* Tambahin supaya consistent */
     }
 }
+
+@media (min-width: 2560px) {
+    .fi-simple-main {
+        margin-right: calc((100vw - 870px) / 2) !important;
+    }
+}   

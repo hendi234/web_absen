@@ -27,6 +27,7 @@ class User extends Authenticatable implements HasAvatar
         'id_employes',
         'id_roles',
         'avatar_url',
+        'division_id',
     ];
 
     /**
@@ -62,15 +63,29 @@ class User extends Authenticatable implements HasAvatar
         return $this->belongsTo(Employe::class, 'id_employes');
     }
 
-    public function getFilamentAvatarUrl(): ?string
+    public function division()
     {
-        $avatarColumn = config('filament-edit-profile.avatar_column', 'avatar_url');
-        return $this->$avatarColumn ? Storage::disk('karyawan')->url($this->$avatarColumn) : null;
+        return $this->belongsTo(Division::class, 'division_id');
     }
 
- public function isAdmin()
-{
-    return in_array($this->id_roles, [1]);
-}
+    public function getFilamentAvatarUrl(): ?string
+    {
+        // Gunakan disk 'public' (atau cukup Storage::url) karena 'karyawan' adalah nama folder di dalam database
+        return $this->avatar_url ? Storage::disk('public')->url($this->avatar_url) : null;
+    }
 
+    // public function isAdmin()
+    // {
+    //     return in_array($this->id_roles, [1]);
+    // }
+
+    public function isAdmin(): bool
+    {
+        return $this->id_roles == 1;
+    }
+
+    public function isHRD(): bool
+    {
+        return $this->id_roles == 3;
+    }
 }

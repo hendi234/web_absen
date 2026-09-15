@@ -1,17 +1,15 @@
 <div>
-    @if(Auth::check() && Auth::user()->id_roles === 1)
-        <x-filament-panels::form wire:submit="save">
-            {{ $this->form }}
+    <form wire:submit.prevent="save" class="space-y-6">
+        
+        {{-- Merender Foto Profil, Nama (disabled untuk karyawan), dan Email --}}
+        {{ $this->form }}
 
-            <div class="fi-form-actions">
-                <div class="flex flex-row-reverse flex-wrap items-center gap-3 fi-ac">
-                    <x-filament::button type="submit">
-                        {{ __('filament-edit-profile::default.save') }}
-                    </x-filament::button>
-                </div>
-            </div>
-        </x-filament-panels::form>
-    @endif
-
-    <x-filament-actions::modals />
+        {{-- Tombol Simpan (Sekarang muncul untuk semua user) --}}
+        <div class="flex justify-end">
+            <x-filament::button type="submit" size="sm">
+                Simpan Perubahan
+            </x-filament::button>
+        </div>
+        
+    </form>
 </div>

@@ -4,8 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Employe;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class EmployeSeeder extends Seeder
 {
@@ -23,6 +21,7 @@ class EmployeSeeder extends Seeder
             'position' => 'Admin',
             'education' => 'SMA',
             'join_date' => '2023-01-01',
+            'division_id' => 1, // ✅ Wajib isi (pastikan divisi id=1 ada)
             'created_by' => 1,
         ]);
     }

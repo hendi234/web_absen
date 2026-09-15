@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use Filament\Tables;
 use App\Models\Employe;
+use App\Models\Division;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Forms\Form;
@@ -47,6 +48,7 @@ class UserResource extends Resource
                         $set('nip', $employe->nip ?? 0);
                         $set('email', $employe->email ?? 0);
                         $set('avatar_url', $employe->avatar ?? 0);
+                        $set('division_id', $employe->division_id ?? 0); // otomatis set division_id
                     }),
                 Select::make('id_roles')
                     ->required()
@@ -81,6 +83,11 @@ class UserResource extends Resource
                     ->maxLength(64)
                     ->disabled()  // ini bikin field read-only (disabled)
                     ->dehydrated(true),
+                Select::make('division_id')
+                    ->label('Divisi')
+                    ->options(Division::all()->pluck('name', 'id'))
+                    ->searchable()
+                    ->required(),
                 DateTimePicker::make('email_verified_at')
                     ->hidden(),
                 TextInput::make('password')
@@ -89,7 +96,7 @@ class UserResource extends Resource
                     ->dehydrated(fn ($state) => filled($state))
                     ->required(fn (string $context): bool => $context === 'create')
                     ->revealable()
-                    ->columnSpanFull()
+                    // ->columnSpanFull()
             ]);
     }
 
@@ -97,7 +104,7 @@ class UserResource extends Resource
     {
         return $table
             ->columns([
-                ImageColumn::make('avatar_url')
+                ImageColumn::make('employe.avatar')
                     ->disk('karyawan')
                     ->circular()
                     ->size(80)
@@ -109,6 +116,10 @@ class UserResource extends Resource
                 TextColumn::make('role.name')
                     ->label('Role')
                     ->sortable(),
+                TextColumn::make('division.name')
+                    ->label('Divisi')
+                    ->sortable()
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

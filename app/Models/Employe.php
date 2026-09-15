@@ -17,4 +17,15 @@ class Employe extends Model
     {
         return $this->hasOne(User::class, 'id_employes');
     }
+
+     // Relasi ke Division
+    public function division()
+     {
+         return $this->belongsTo(Division::class, 'division_id');
+     }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
 }

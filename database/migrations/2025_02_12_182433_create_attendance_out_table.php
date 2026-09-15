@@ -13,10 +13,21 @@ return new class extends Migration
     {
         Schema::create('attendance_out', function (Blueprint $table) {
             $table->id();
+
+            // relasi ke user
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+
+            // lokasi keluar
             $table->string('latitude', 20);
             $table->string('longitude', 20);
+
+            // foto keluar
             $table->text('foto');
+
+            // ✅ keterangan absensi keluar
+            $table->text('desc')->nullable();
+
+            // waktu absen keluar
             $table->timestamp('time_attendance')->default(now());
         });
     }

@@ -13,13 +13,38 @@ return new class extends Migration
     {
         Schema::create('daily_attendance', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('id_attendance_in');
-            $table->foreign('id_attendance_in')->references('id')->on('attendance_in')->onDelete("CASCADE")->onUpdate("CASCADE");
-            $table->unsignedBigInteger('id_attendance_out');
-            $table->foreign('id_attendance_out')->references('id')->on('attendance_out')->onDelete("CASCADE")->onUpdate("CASCADE");
+
+            // relasi ke absen masuk
+            $table->unsignedBigInteger('id_attendance_in')->nullable();
+            $table->foreign('id_attendance_in')
+                ->references('id')
+                ->on('attendance_in')
+                ->onDelete('CASCADE')
+                ->onUpdate('CASCADE');
+
+            // relasi ke absen keluar
+            $table->unsignedBigInteger('id_attendance_out')->nullable();
+            $table->foreign('id_attendance_out')
+                ->references('id')
+                ->on('attendance_out')
+                ->onDelete('CASCADE')
+                ->onUpdate('CASCADE');
+
+            // tanggal absensi
+            $table->date('tanggal')->default(now());
+
+            // durasi kerja (nullable)
             $table->time('work_time')->nullable();
+
+            // ✅ keterangan absensi harian (misal gabungan dari masuk & keluar)
+            $table->text('desc')->nullable();
+
+            // status absensi (true = sedang kerja, false = selesai)
             $table->boolean('status')->default(false);
+
+            // update oleh siapa (nullable)
             $table->unsignedBigInteger('updated_by')->nullable();
+
             $table->timestamps();
         });
     }

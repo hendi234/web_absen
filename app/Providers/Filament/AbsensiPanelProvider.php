@@ -73,9 +73,10 @@ class AbsensiPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
-            ->databaseNotifications(fn () => auth()->user()->isAdmin())
+            // ->databaseNotifications(fn () => auth()->user()->isAdmin())
             ->plugins([   
                 FilamentEditProfilePlugin::make()
+                    ->shouldShowEditProfileForm(false) 
                     ->customProfileComponents([
                         \App\Livewire\CustomProfileComponent::class,
                     ])
@@ -85,10 +86,11 @@ class AbsensiPanelProvider extends PanelProvider
                     ->setTitle('Profile')
                     ->setNavigationLabel(fn() => auth()->user()->name)
                     ->setIcon('heroicon-o-user-circle')
-                    ->shouldShowAvatarForm(
-                        directory: 'karyawan',
-                    ),
+                    
+                    // Kembalikan ke true agar fitur foto aktif kembali di sistem plugin
+                    ->shouldShowAvatarForm(true), 
             ])
+
             ->userMenuItems([
                 'profile' => MenuItem::make()
                     ->label(fn() => auth()->user()->name)
